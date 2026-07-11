@@ -1,0 +1,11 @@
+:root { color-scheme: dark; }
+html, body { margin: 0; height: 100%; background: #0b1020; overflow: hidden; font-family: system-ui, sans-serif; color: #dbeafe; }
+#app { position: fixed; inset: 0; }
+#hud { position: fixed; top: 14px; left: 16px; z-index: 2; }
+#hud h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: .5px; }
+#hud .count { opacity: .7; font-size: 14px; }
+.roster { position: fixed; inset: 56px 16px 16px; overflow: auto; display: grid; gap: 6px; align-content: start; }
+.roster .row { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.roster .chip { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+.roster .cs { font-weight: 600; }
+.roster .st { opacity: .7; }

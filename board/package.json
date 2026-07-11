@@ -6,9 +6,15 @@
   "description": "Mission Control — the shared ws hub + Three.js spectator for Ship It",
   "scripts": {
     "start": "node src/index.js",
+    "build": "vite build",
+    "dev": "vite build && node src/index.js",
     "test": "node --test"
   },
   "dependencies": {
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "three": "^0.169.0",
+    "vite": "^6.0.7"
   }
 }
