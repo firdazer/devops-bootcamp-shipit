@@ -25,6 +25,12 @@ test('validateConfig rejects an over-long shipName', () => {
   assert.equal(r.ok, false);
 });
 
+test('validateConfig accepts a 24-char name padded with whitespace (agrees with toRenderParams)', () => {
+  const padded = '  ' + 'x'.repeat(24) + '  ';
+  assert.equal(validateConfig({ shipName: padded, color: '#000000', emblem: 'comet' }).ok, true);
+  assert.equal(toRenderParams({ shipName: padded, color: '#000000', emblem: 'comet' }).shipName, 'x'.repeat(24));
+});
+
 test('validateConfig rejects a non-object', () => {
   assert.equal(validateConfig(null).ok, false);
   assert.equal(validateConfig([]).ok, false);

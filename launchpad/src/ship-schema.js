@@ -10,7 +10,8 @@ const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 export function validateConfig(cfg) {
   if (!isObject(cfg)) return { ok: false, errors: ['config must be a JSON object'] };
   const errors = [];
-  if (typeof cfg.shipName !== 'string' || cfg.shipName.trim().length < 1 || cfg.shipName.length > 24) {
+  const name = typeof cfg.shipName === 'string' ? cfg.shipName.trim() : '';
+  if (name.length < 1 || name.length > 24) {
     errors.push('shipName must be a non-empty string of at most 24 characters');
   }
   if (typeof cfg.color !== 'string' || !COLOR_RE.test(cfg.color)) {
