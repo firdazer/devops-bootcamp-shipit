@@ -104,6 +104,16 @@ export function hueShiftFor(color, baseHue) { /* per the comment above */ }
 
 ---
 
+> **Correction (2026-07-14, during implementation — commit `36ec7ce`):** visual
+> verification found the four ships share ONE baked texture atlas (identical
+> md5), so there is no reliable per-model `baseHue` — rotating by an estimated
+> base hue mismatched the target (cyan config → green hauler). The design was
+> changed to **set the hue absolutely** rather than rotate it: `hueOf(color)`
+> returns the target hue as a fraction `[0,1)` (or `null` for greyscale) and the
+> shader sets every saturated texel to it via exact RGB→HSV→RGB. This lands on
+> the chosen colour on any model, needs no `baseHue` table, and preserves
+> greys/blacks. §5's rotation matrix below is superseded by that HSV set.
+
 ## 5. Procedural hue-shift (the one visual mechanism)
 
 A single technique used identically on the launchpad site and the board: inject a hue rotation into

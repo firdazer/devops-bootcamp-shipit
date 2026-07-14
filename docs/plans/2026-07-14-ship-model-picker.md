@@ -15,8 +15,8 @@
 - **No new test framework.** Unit tests use `node --test`. **No `vitest`, no Playwright in the test script.** Visual checks are driver/preview-based (the `scripts/smoke.sh` precedent).
 - **Config file:** `ship.config.json` = `{ shipName, color, shipModel, emblem }`. `shipName` non-empty ≤ 24 chars; `color` matches `/^#[0-9a-fA-F]{6}$/`; `shipModel` ∈ `fighter · interceptor · hauler · scout`; `emblem` ∈ `comet · bolt · star · ring · delta · phoenix`.
 - **`shipModel` bad-value policy:** strict `validateConfig`/preflight → ABORT; lenient `toRenderParams`/board `sanitizeEvent` → default `fighter`.
-- **The 4 ships (id → file, baseHue°):** `fighter`→`fighter.glb`,25 · `interceptor`→`interceptor.glb`,330 · `hauler`→`hauler.glb`,140 · `scout`→`scout.glb`,48.
-- **hue-shift math lives in the pure core** (`ship-schema.js` / `ships.js` — no `three` import); the shader mutation (`applyHueShift`) lives in the render modules (`scene.js` / `ship-mesh.js`), duplicated.
+- **The 4 ships (id → file):** `fighter`→`fighter.glb` · `interceptor`→`interceptor.glb` · `hauler`→`hauler.glb` · `scout`→`scout.glb`. **No per-model `baseHue`** — the four ships share one baked texture atlas, so recolouring SETS the hue absolutely (see next line), which lands on the chosen colour for any model.
+- **hue math lives in the pure core** (`ship-schema.js` / `ships.js` — no `three` import): `hueOf(color) → number|null` returns the chosen colour's hue as a fraction `[0,1)`, or `null` for a greyscale/invalid colour (leave the paint). The shader mutation (`applyHueShift`) lives in the render modules (`scene.js` / `ship-mesh.js`), duplicated; it SETS every saturated texel's hue to that fraction via RGB→HSV→RGB (greys/blacks stay neutral). **NOTE:** Tasks 2 & 3 were already implemented and then corrected in commit `36ec7ce` to this absolute-set design (the launchpad code below still shows the older `baseHue`/`hueShiftFor` rotation — treat commit `36ec7ce` as the source of truth for the launchpad, and mirror `hueOf`/absolute-set in the board Tasks 4 & 5 below).
 - **Spec:** `docs/specs/2026-07-14-ship-model-picker-design.md`.
 
 ---
@@ -549,7 +549,7 @@ Add the board's copy of the registry and thread a lenient `shipModel` through `s
 - Modify: `board/test/server.test.js`
 
 **Interfaces:**
-- Produces (from `ships.js`): `SHIPS`, `SHIP_IDS`, `DEFAULT_SHIP`, `hueShiftFor` — **byte-identical** to the launchpad copy's registry/helper (verified in Step 6).
+- Produces (from `ships.js`): `SHIPS`, `SHIP_IDS`, `DEFAULT_SHIP`, `hueOf` — **byte-identical** to the launchpad copy's registry/helper as it stands after commit `36ec7ce` (SHIPS has NO `baseHue`; `hueOf(color) → number|null`). Verified in Step 6.
 - Produces (from `room.js`): `sanitizeEvent(raw)` entry now includes `shipModel: string` (∈ `SHIP_IDS`, default `DEFAULT_SHIP`).
 
 - [ ] **Step 1: Write the failing tests — update `board/test/room.test.js`**
@@ -585,32 +585,36 @@ Expected: FAIL (`../src/ships.js` missing; `shipModel` not on the entry).
 
 - [ ] **Step 3: Create `board/src/ships.js`**
 
+Copy this VERBATIM from the current `launchpad/src/ship-schema.js` (post-`36ec7ce`) — the SHIPS registry rows (id/file/label, NO baseHue), `SHIP_IDS`, `DEFAULT_SHIP`, and `hueOf`:
 ```js
 // Board copy of the launchpad ship registry + hue math. Keep byte-identical to
-// launchpad/src/ship-schema.js's SHIPS / SHIP_IDS / DEFAULT_SHIP / hueShiftFor.
+// launchpad/src/ship-schema.js's SHIPS / SHIP_IDS / DEFAULT_SHIP / hueOf.
 export const SHIPS = [
-  { id: 'fighter',     file: 'fighter.glb',     label: 'Fighter',     baseHue: 25 },
-  { id: 'interceptor', file: 'interceptor.glb', label: 'Interceptor', baseHue: 330 },
-  { id: 'hauler',      file: 'hauler.glb',      label: 'Hauler',      baseHue: 140 },
-  { id: 'scout',       file: 'scout.glb',       label: 'Scout',       baseHue: 48 },
+  { id: 'fighter',     file: 'fighter.glb',     label: 'Fighter' },
+  { id: 'interceptor', file: 'interceptor.glb', label: 'Interceptor' },
+  { id: 'hauler',      file: 'hauler.glb',      label: 'Hauler' },
+  { id: 'scout',       file: 'scout.glb',       label: 'Scout' },
 ];
 export const SHIP_IDS = SHIPS.map((s) => s.id);
 export const DEFAULT_SHIP = 'fighter';
 
-export function hueShiftFor(color, baseHue) {
+// The hue of `color` as a fraction of the colour wheel [0, 1), which the ship
+// shader sets on every saturated texel. Returns null for a (near-)greyscale or
+// invalid colour, which leaves the baked paint untouched (greys stay grey).
+export function hueOf(color) {
   const m = /^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/.exec(typeof color === 'string' ? color : '');
-  if (!m) return 0;
+  if (!m) return null;
   const r = parseInt(m[1], 16) / 255, g = parseInt(m[2], 16) / 255, b = parseInt(m[3], 16) / 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
   const l = (max + min) / 2;
   const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
-  if (sat < 0.15) return 0;
+  if (sat < 0.15) return null;
   let h;
   if (max === r) h = ((g - b) / d) % 6;
   else if (max === g) h = (b - r) / d + 2;
   else h = (r - g) / d + 4;
   h = (h * 60 + 360) % 360;
-  return ((h - baseHue) * Math.PI) / 180;
+  return h / 360;
 }
 ```
 
@@ -654,8 +658,9 @@ test('POST shipModel survives into the ws roster', async () => {
 Run:
 ```bash
 cd /home/debian/repo/devops-bootcamp-shipit
-diff <(sed -n '/export const SHIPS/,/^}/p' launchpad/src/ship-schema.js | grep -E "id:|hueShiftFor|baseHue|DEFAULT_SHIP|SHIP_IDS") \
-     <(sed -n '/export const SHIPS/,/^}/p' board/src/ships.js | grep -E "id:|hueShiftFor|baseHue|DEFAULT_SHIP|SHIP_IDS")
+diff <(sed -n '/export function hueOf/,/^}/p' launchpad/src/ship-schema.js) \
+     <(sed -n '/export function hueOf/,/^}/p' board/src/ships.js)
+diff <(grep -E "id: '" launchpad/src/ship-schema.js) <(grep -E "id: '" board/src/ships.js)
 cd board && node --test
 ```
 Expected: the `diff` shows no differences in the SHIPS rows / helper signature; `node --test` is green.
@@ -680,7 +685,7 @@ Replace the procedural rocket with a clone of the learner's chosen GLB, hue-shif
 - Modify: `board/client/fallback.js`
 
 **Interfaces:**
-- Consumes: `SHIPS`, `hueShiftFor` from `../src/ships.js` — the same file `room.js` imports (`board/src/ships.js` is the single board-side copy). It's pure ESM with no Node built-ins, so Rollup bundles it into the client at `vite build`; the relative path `../src/ships.js` resolves from `board/client/`.
+- Consumes: `SHIPS`, `hueOf` from `../src/ships.js` — the same file `room.js` imports (`board/src/ships.js` is the single board-side copy). It's pure ESM with no Node built-ins, so Rollup bundles it into the client at `vite build`; the relative path `../src/ships.js` resolves from `board/client/`.
 - Produces (from `ship-mesh.js`): `createShip({ callsign, color, shipModel, template }) → THREE.Group` (same `userData` shape as before, now with `shipModel`: `{ callsign, color, shipModel, mat, trail, baseEmissive }`), plus unchanged `setEmissiveBoost`, `setTrail`, `setGrounded`. New: `preloadShipTemplates() → Promise<Map<id, THREE.Object3D>>`.
 
 - [ ] **Step 1: Replace `board/client/ship-mesh.js`**
@@ -689,7 +694,7 @@ Replace the procedural rocket with a clone of the learner's chosen GLB, hue-shif
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { PALETTE } from './theme.js';
-import { SHIPS, hueShiftFor } from '../src/ships.js';
+import { SHIPS, hueOf } from '../src/ships.js';
 
 // Preload every ship GLB once; return id -> template Object3D. Templates own the
 // shared geometry + textures; per-ship clones own only their cloned materials.
@@ -706,7 +711,7 @@ export function createShip({ callsign, color, shipModel, template }) {
   fitByMaxDimension(model, 0.8);
 
   const tint = new THREE.Color(color);
-  const hue = hueShiftFor(color, (SHIPS.find((s) => s.id === shipModel) || SHIPS[0]).baseHue);
+  const hue = hueOf(color); // target hue fraction [0,1), or null for a greyscale colour
   let mat = null; // the model's material — the launch beat drives its emissive
   model.traverse((node) => {
     if (node.isMesh && node.material) {
@@ -758,21 +763,38 @@ export function setGrounded(group, on) {
   mat.emissiveIntensity = on ? 0.6 : baseEmissive;
 }
 
-function applyHueShift(material, radians) {
-  if (!radians) return;
+// SET every saturated texel's hue to `hueFrac` ([0,1)), in-shader, after the
+// base-colour texture is sampled. Setting (not rotating) lands exactly on the
+// chosen colour on any model — the 4 ships share one atlas with no base hue.
+// Greys/blacks (saturation ~0) stay neutral. Null hueFrac → leave the paint.
+// MUST match launchpad/src/scene.js's applyHueShift verbatim.
+function applyHueShift(material, hueFrac) {
+  if (hueFrac == null) return;
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.uHue = { value: radians };
+    shader.uniforms.uHue = { value: hueFrac };
     shader.fragmentShader =
-      'uniform float uHue;\n' +
+      `uniform float uHue;
+       vec3 rgb2hsv(vec3 c) {
+         vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+         vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+         vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+         float d = q.x - min(q.w, q.y);
+         float e = 1.0e-10;
+         return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+       }
+       vec3 hsv2rgb(vec3 c) {
+         vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+         vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+         return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+       }
+       ` +
       shader.fragmentShader.replace(
         '#include <map_fragment>',
         `#include <map_fragment>
          {
-           float a = uHue;
-           mat3 m = mat3(0.299,0.587,0.114, 0.299,0.587,0.114, 0.299,0.587,0.114)
-             + cos(a)*mat3(0.701,-0.587,-0.114, -0.299,0.413,-0.114, -0.299,-0.587,0.886)
-             + sin(a)*mat3(0.168,0.330,-0.497, -0.328,0.035,0.292, 1.250,-1.050,-0.203);
-           diffuseColor.rgb = clamp(m * diffuseColor.rgb, 0.0, 1.0);
+           vec3 hsv = rgb2hsv(diffuseColor.rgb);
+           hsv.x = uHue;
+           diffuseColor.rgb = hsv2rgb(hsv);
          }`,
       );
   };
