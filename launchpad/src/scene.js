@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { SHIPS, hueShiftFor } from './ship-schema.js';
+import { SHIPS, hueOf } from './ship-schema.js';
 
 export function createScene(container, params, { onError } = {}) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
   camera.position.set(0, 1.1, 6);
+  camera.lookAt(0, 0, 0); // the fit-centred ship sits at the origin — aim at it
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -23,7 +24,7 @@ export function createScene(container, params, { onError } = {}) {
   container.append(spinner);
 
   const ship = SHIPS.find((s) => s.id === params.shipModel) || SHIPS[0];
-  const hue = hueShiftFor(params.color, ship.baseHue);
+  const hue = hueOf(params.color); // target hue fraction [0,1), or null for a greyscale colour
 
   let rocket = null;
   let disposed = false;
@@ -87,27 +88,44 @@ export function createScene(container, params, { onError } = {}) {
   return { dispose: teardown };
 }
 
-// Rotate the hue of every mesh material in the model by `radians`, in-shader,
-// after the base-colour texture is sampled. Low-saturation texels (black
-// cockpit, grey trim) barely move; saturated paint rotates to the target hue.
-function applyHueShift(object3d, radians) {
-  if (!radians) return;
+// Recolour the model by SETTING every saturated texel to `hueFrac` (the chosen
+// colour's hue, [0,1)), in-shader, after the base-colour texture is sampled.
+// Setting the hue (rather than rotating it) lands exactly on the chosen colour
+// on any model — the four ships share one atlas with no per-model base hue.
+// Low-saturation texels (black cockpit, grey trim) keep their ~0 saturation, so
+// they stay neutral. A null hueFrac (greyscale colour) leaves the paint alone.
+function applyHueShift(object3d, hueFrac) {
+  if (hueFrac == null) return;
   object3d.traverse((node) => {
     if (node.isMesh && node.material) {
       node.material = node.material.clone();
       node.material.onBeforeCompile = (shader) => {
-        shader.uniforms.uHue = { value: radians };
+        shader.uniforms.uHue = { value: hueFrac };
         shader.fragmentShader =
-          'uniform float uHue;\n' +
+          `uniform float uHue;
+           vec3 rgb2hsv(vec3 c) {
+             vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+             vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+             vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+             float d = q.x - min(q.w, q.y);
+             float e = 1.0e-10;
+             return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+           }
+           vec3 hsv2rgb(vec3 c) {
+             vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+             vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+             return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+           }
+           ` +
           shader.fragmentShader.replace(
             '#include <map_fragment>',
             `#include <map_fragment>
              {
-               float a = uHue;
-               mat3 m = mat3(0.299,0.587,0.114, 0.299,0.587,0.114, 0.299,0.587,0.114)
-                 + cos(a)*mat3(0.701,-0.587,-0.114, -0.299,0.413,-0.114, -0.299,-0.587,0.886)
-                 + sin(a)*mat3(0.168,0.330,-0.497, -0.328,0.035,0.292, 1.250,-1.050,-0.203);
-               diffuseColor.rgb = clamp(m * diffuseColor.rgb, 0.0, 1.0);
+               // Set hue absolutely; keep saturation + value, so greys and
+               // blacks (saturation ~0) stay neutral while the paint recolours.
+               vec3 hsv = rgb2hsv(diffuseColor.rgb);
+               hsv.x = uHue;
+               diffuseColor.rgb = hsv2rgb(hsv);
              }`,
           );
       };

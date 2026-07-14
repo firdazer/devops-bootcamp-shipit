@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  EMBLEMS, SHIP_IDS, SHIPS, DEFAULT_SHIP, hueShiftFor,
+  EMBLEMS, SHIP_IDS, SHIPS, DEFAULT_SHIP, hueOf,
   validateConfig, toRenderParams, DEFAULTS,
 } from './ship-schema.js';
 
@@ -67,26 +67,33 @@ test('DEFAULTS.shipModel is the default ship and is a known id', () => {
   assert.ok(SHIP_IDS.includes(DEFAULT_SHIP));
 });
 
-test('every ship has an id, file, label and numeric baseHue', () => {
+test('every ship has an id, file and label', () => {
   for (const s of SHIPS) {
     assert.match(s.id, /^[a-z]+$/);
     assert.match(s.file, /\.glb$/);
     assert.equal(typeof s.label, 'string');
-    assert.equal(typeof s.baseHue, 'number');
   }
 });
 
-test('hueShiftFor: greyscale or invalid colour → 0', () => {
-  assert.equal(hueShiftFor('#808080', 25), 0);
-  assert.equal(hueShiftFor('not-a-color', 25), 0);
+test('hueOf: greyscale or invalid colour → null (leave the baked paint)', () => {
+  assert.equal(hueOf('#808080'), null);
+  assert.equal(hueOf('not-a-color'), null);
+  assert.equal(hueOf(null), null);
 });
 
-test('hueShiftFor: same hue as baseHue → ~0', () => {
-  approx(hueShiftFor('#ff0000', 0), 0);         // red hue 0, baseHue 0
+test('hueOf: pure red → hue 0', () => {
+  approx(hueOf('#ff0000'), 0);
 });
 
-test('hueShiftFor: cyan on the fighter rotates ~163°', () => {
-  approx(hueShiftFor('#22d3ee', 25), ((188 - 25) * Math.PI) / 180, 0.02);
+test('hueOf: cyan → ~188°/360 of the wheel', () => {
+  approx(hueOf('#22d3ee'), 188 / 360, 0.01);
+});
+
+test('hueOf: always returns a fraction in [0, 1) for a saturated colour', () => {
+  for (const c of ['#ff0000', '#00ff00', '#0000ff', '#ec4899', '#84cc16']) {
+    const h = hueOf(c);
+    assert.ok(h >= 0 && h < 1, `${c} → ${h}`);
+  }
 });
 
 test('all EMBLEMS are lowercase words', () => {
