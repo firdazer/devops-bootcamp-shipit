@@ -64,32 +64,47 @@ already did `docker build` + ECR by hand in the AWS sessions — S4 *automates t
 The one integration point. Keep it stable; slides and the reference workflows depend on it.
 
 - **Identity** = the learner's GitHub username (`${{ github.actor }}`), used as `callsign`.
-- **Config:** `ship.config.json` drives the learner's *site*; the *board* only sees what the report
-  step sends. The taught step hardcodes the learner's colour in the JSON body and omits `shipModel`
-  — so taught ships all render the default model, hue-set by `color` (hex or a named-palette colour;
-  board normalizes, greys/blacks stay neutral). `shipName` is cosmetic, never identity.
-- **Transport:** a workflow step POSTs one event per stage it reports. The taught form (CI/CD 3
-  slides) is a **single liftoff report** after the Pages deploy; extra beats (pad, abort-on-failure)
-  are optional operator flourishes, never required of learners.
+- **Config:** the report script reads `color` + `shipModel` from the learner's `ship.config.json`,
+  so the board renders each learner's real colour AND model (hex or a named-palette colour; board
+  normalizes, greys/blacks stay neutral). `shipName` is cosmetic, never identity.
+- **Transport:** `launchpad/scripts/report.sh` (shipped in this repo — learners call it, never write
+  it) POSTs one event per invocation. The learner workflow adds ONE step (CI/CD 3 Amali 2) — a
+  **single liftoff report** after the Pages deploy:
 
-The taught report (CI/CD 3 slide 14, quoted verbatim — the whole wire contract learners meet):
+```yaml
+- name: Lapor ke papan
+  run: bash scripts/report.sh
+  env:
+    BOARD_URL: ${{ vars.BOARD_URL }}
+    SHIPIT_TOKEN: ${{ secrets.SHIPIT_TOKEN }}
+```
+
+  That `env:` block IS the lesson surface — one `vars` line, one `secrets` line, nothing else. The
+  HTTP mechanics live in the script. Extra beats (`report.sh pad running`, abort-on-failure) are
+  optional operator flourishes, never required of learners.
+
+What the script sends (slides show this as *anatomy* — learners read it, never type it):
 
 ```
 POST  $BOARD_URL/api/event
 Authorization: Bearer $SHIPIT_TOKEN
 Content-Type: application/json
 
-{ "callsign": "octocat", "stage": "liftoff", "status": "shipped", "color": "#22d3ee" }
+{ "callsign": "octocat", "stage": "liftoff", "status": "shipped",
+  "color": "#22d3ee", "shipModel": "fighter" }
 ```
 
-- **Board accepts more than the slides teach** (operator flourishes only, never asked of learners):
+`callsign` = `GITHUB_ACTOR` (Actions sets it automatically — no templating in the learner file);
+`color`/`shipModel` read from `ship.config.json`; stage/status from the script args (default
+`liftoff shipped`).
+
+- **Board accepts more than the taught report** (operator flourishes only, never asked of learners):
   `stage` ∈ `pad | build | test | clearance | liftoff`, `status` ∈ `running | passed | failed |
-  aborted | shipped`, plus optional `shipModel` (`fighter · interceptor · hauler · scout`),
-  `version`, `siteUrl`. Required: just `callsign` + a known `stage`/`status` (see
-  `board/src/room.js`).
-- **The taught `curl` deliberately has NO `-f` flag:** on a 401 the step stays green and the run log
-  prints `{"error":"unauthorized"}` — CI/CD 3 Amali 3 (wrong-token proof) depends on exactly this.
-  Do not "harden" it to `curl -fsS` in slides or reference branches.
+  aborted | shipped`, plus optional `version`, `siteUrl`. Required: just `callsign` + a known
+  `stage`/`status` — `color`/`shipModel` default when absent or invalid (see `board/src/room.js`).
+- **The script's `curl` deliberately has NO `-f` flag** (pinned in `report.sh`'s header too): on a
+  401 the step stays green and the run log prints `{"error":"unauthorized"}` — CI/CD 3 Amali 3
+  (wrong-token proof) depends on exactly this. Do not "harden" it to `-fsS`.
 
 - `$BOARD_URL` is a **public** repo/environment **variable**.
 - `$SHIPIT_TOKEN` is the **secret** taught in CI/CD 3 — a ship with no/late token can't report to
@@ -123,14 +138,15 @@ Frozen — slides quote these verbatim.
 - **The slides are the source of truth for the workflow** — learners build `deploy.yaml` from the
   building blocks on the slides, nothing else. The authored answer keys (`starter/workflows/`) were
   retired 2026-07-17: learners shipped a simpler file than they prescribed, and the extra plumbing
-  (config extraction via `jq`, pad/abort beats, `env:` indirection) never earned its place. A
-  session's reference state is *derived* by running its amali on a test fork (see Distribution).
+  (config extraction, pad/abort beats) never earned its place *in the learner's workflow* — it now
+  lives in the prop's `launchpad/scripts/report.sh` instead, behind a two-line `env:` mapping that
+  doubles as the secrets/vars demo surface. A session's reference state is *derived* by running its
+  amali on a test fork (see Distribution).
 
 **Taught workflow — end of S3.** Snapshot derived from the delivered decks 2026-07-17, NOT a spec —
 regenerate from the slides if in doubt. Filename is `.github/workflows/deploy.yaml` (set in CI/CD 1:
 `.yaml`, not `.yml`); `permissions` sits at the bottom because that's where CI/CD 1 adds it; S1's
-`workflow_dispatch` was dropped when S3 rewrote `on:`; each learner's `color` is their own value
-(`#22d3ee` = the slide example):
+`workflow_dispatch` was dropped when S3 rewrote `on:`:
 
 ```yaml
 name: deploy
@@ -167,11 +183,10 @@ jobs:
           path: launchpad/dist
       - uses: actions/deploy-pages@v5
       - name: Lapor ke papan
-        run: >
-          curl -X POST ${{ vars.BOARD_URL }}/api/event
-          -H "Authorization: Bearer ${{ secrets.SHIPIT_TOKEN }}"
-          -H "Content-Type: application/json"
-          -d '{"callsign":"${{ github.actor }}","stage":"liftoff","status":"shipped","color":"#22d3ee"}'
+        run: bash scripts/report.sh
+        env:
+          BOARD_URL: ${{ vars.BOARD_URL }}
+          SHIPIT_TOKEN: ${{ secrets.SHIPIT_TOKEN }}
 
 permissions:
   pages: write
@@ -197,6 +212,9 @@ conventional `github-pages` environment. S4 extends this file; it must not restr
 - **`cicdN` reference branches** (recovery/diff aid, not a spec): before each session the operator
   follows that session's amali verbatim on a test fork — proving the slides run green — and pushes
   the resulting state as branch `cicdN` on `Infratify/devops-bootcamp-shipit`.
+- **CI/CD 3 operator dep:** push `launchpad/scripts/report.sh` to upstream `main` before class
+  (new file — sync-fork safe); learners fetch it with `gh repo sync` + `git pull` at the start of
+  Amali 2 — the first live use of the fork model's "sync for instructor fixes" promise.
 - **Discipline rule (load-bearing):** upstream `main` must never gain `.github/workflows/` or
   re-touch `launchpad/ship.config.json`, so learner **sync-fork** stays conflict-free.
 
