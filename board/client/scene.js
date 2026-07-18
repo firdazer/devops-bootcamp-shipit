@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { createShip, setEmissiveBoost, setTrail, setGrounded, preloadShipTemplates, disposeShip, disposeObject3D } from './ship-mesh.js';
+import { createShip, setEmissiveBoost, setTrail, setGrounded, setLive, preloadShipTemplates, disposeShip, disposeObject3D } from './ship-mesh.js';
 import { placement } from './placement.js';
 import { orbitAngle } from './orbit.js';
 import { launchPhase, isComplete, easeInCubic, easeInOutCubic } from './launch.js';
@@ -70,6 +70,7 @@ export function createScene(container, { onLiftoff, onPreloadError } = {}) {
         ships.set(s.callsign, rec);
       }
       rec.data = s; rec.index = i;
+      setLive(rec.group, s.live); // green halo when the real Pages site is reachable
 
       const zone = placement(s).zone;
       if (zone !== rec.lastZone) setGrounded(rec.group, zone === 'grounded');
@@ -154,12 +155,14 @@ export function createScene(container, { onLiftoff, onPreloadError } = {}) {
 
     const { map, count } = orbitingIndex();
     const damp = 1 - Math.exp(-DAMP_K * dt);
+    const livePulse = 0.35 + 0.35 * (0.5 + 0.5 * Math.sin(elapsedMs * 0.004)); // ~0.35→0.70
     for (const rec of ships.values()) {
       targetFor(rec, map.get(rec.data.callsign) ?? 0, count, tmp);
       if (!rec.pos) rec.pos = tmp.clone();          // snap on first sight
       else if (rec.launch) applyLaunch(rec, tmp);   // scripted beat overrides damping
       else rec.pos.lerp(tmp, damp);                 // ease toward target — no teleports
       rec.group.position.copy(rec.pos);
+      if (rec.group.userData.live) rec.group.userData.liveRing.material.opacity = livePulse;
     }
     composer.render();
     raf = requestAnimationFrame(tick);

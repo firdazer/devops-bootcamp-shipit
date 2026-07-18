@@ -7,6 +7,7 @@ import { WebSocketServer } from 'ws';
 import { Roster, sanitizeEvent } from './room.js';
 import { parse, rosterMsg, raceMsg } from './messages.js';
 import { Race } from './race.js';
+import { createLiveness } from './liveness.js';
 import { pickPrompts, SESSIONS } from './corpus.js';
 
 const DIST = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
@@ -36,7 +37,7 @@ function readBody(req, limit = 64 * 1024) {
   });
 }
 
-export function createServer({ port = 3000, token = null, operatorKey = null, publicDir = DIST } = {}) {
+export function createServer({ port = 3000, token = null, operatorKey = null, publicDir = DIST, fetchImpl = fetch } = {}) {
   const roster = new Roster();
   const race = new Race({ total: 12 });
   const clients = new Set();
@@ -44,6 +45,10 @@ export function createServer({ port = 3000, token = null, operatorKey = null, pu
   let session = 'cicd3';
   let dirty = false;         // roster changed
   let raceDirty = false;     // race state or view changed
+  // Liveness: a ship is LIVE only when its real Pages site answers 200. Reported
+  // siteUrls are probed on arrival + on a periodic sweep; a flip marks dirty so
+  // the next tick rebroadcasts the roster with fresh `live` flags.
+  const liveness = createLiveness({ roster, fetchImpl, onChange: () => { dirty = true; } });
 
   // Operator-guarded control endpoints. When operatorKey is null, open (dev).
   function operate(req, res, fn) {
@@ -59,6 +64,7 @@ export function createServer({ port = 3000, token = null, operatorKey = null, pu
         if (!event) return json(res, 400, { error: 'invalid event: need callsign + known stage/status' });
         roster.upsert(event);
         dirty = true;
+        liveness.probe(event); // check the real site now — snappy first-contact green
         return json(res, 202, { ok: true });
       }
       if (req.method === 'POST' && req.url === '/api/race/start') {
@@ -118,14 +124,15 @@ export function createServer({ port = 3000, token = null, operatorKey = null, pu
   });
 
   const tick = setInterval(() => {
-    if (dirty) { dirty = false; const msg = rosterMsg(roster.list()); for (const ws of clients) send(ws, msg); }
+    if (dirty) { dirty = false; const msg = rosterMsg(roster.list().map((s) => ({ ...s, live: liveness.isLive(s.callsign) }))); for (const ws of clients) send(ws, msg); }
     if (raceDirty) { raceDirty = false; const msg = raceMsg(race.snapshot(), view, clients.size, roster); for (const ws of clients) send(ws, msg); }
   }, 50);
 
   server.listen(port);
+  liveness.start();
   return {
     get port() { const a = server.address(); return a && typeof a === 'object' ? a.port : port; },
-    roster, race, server, wss,
-    close() { clearInterval(tick); wss.close(); return new Promise((r) => server.close(r)); },
+    roster, race, liveness, server, wss,
+    close() { clearInterval(tick); liveness.stop(); wss.close(); return new Promise((r) => server.close(r)); },
   };
 }

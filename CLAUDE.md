@@ -91,17 +91,26 @@ Authorization: Bearer $SHIPIT_TOKEN
 Content-Type: application/json
 
 { "callsign": "octocat", "stage": "liftoff", "status": "shipped",
-  "color": "#22d3ee", "shipModel": "fighter" }
+  "color": "#22d3ee", "shipModel": "fighter",
+  "siteUrl": "https://octocat.github.io/devops-bootcamp-shipit/" }
 ```
 
 `callsign` = `GITHUB_ACTOR` (Actions sets it automatically — no templating in the learner file);
 `color`/`shipModel` read from `ship.config.json`; stage/status from the script args (default
-`liftoff shipped`).
+`liftoff shipped`). `siteUrl` is **derived inside `report.sh`** from the vars Actions already sets
+(`GITHUB_REPOSITORY_OWNER` + repo name → `https://<owner>.github.io[/<repo>]/`) — NOT from the taught
+`env:` block, which stays the pinned two lines. Omitted when the script runs outside Actions.
 
 - **Board accepts more than the taught report** (operator flourishes only, never asked of learners):
   `stage` ∈ `pad | build | test | clearance | liftoff`, `status` ∈ `running | passed | failed |
   aborted | shipped`, plus optional `version`, `siteUrl`. Required: just `callsign` + a known
   `stage`/`status` — `color`/`shipModel` default when absent or invalid (see `board/src/room.js`).
+- **`siteUrl` → LIVE (green).** When an event carries a `siteUrl`, the board probes it (`HEAD`, on
+  arrival + a periodic sweep) and broadcasts a per-ship `live` boolean on the roster; a ship shows a
+  green **LIVE** halo only when its *real* Pages site answers `200` (see `board/src/liveness.js`).
+  This ties the token + report to the actual deploy — a reported ship that never went live stays
+  neutral. A fresh deploy can 404 for ~1 min; the periodic re-check flips it green when the site
+  actually comes up. Non-200/timeout = "not live yet," never an error.
 - **The script's `curl` deliberately has NO `-f` flag** (pinned in `report.sh`'s header too): on a
   401 the step stays green and the run log prints `{"error":"unauthorized"}` — CI/CD 3 Amali 3
   (wrong-token proof) depends on exactly this. Do not "harden" it to `-fsS`.
