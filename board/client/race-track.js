@@ -63,13 +63,24 @@ export function createRaceTrack(container, { me = null } = {}) {
     });
   }
 
+  function medalsText(ships) {
+    const podium = ships.filter((s) => s.finishedAt != null)
+      .sort((a, b) => a.finishedAt - b.finishedAt).slice(0, 3)
+      .map((s, i) => `${MEDALS[i]} @${s.callsign}`);
+    return podium.length ? podium.join('  ') : '';
+  }
+
   function bannerText(phase, ships) {
     if (phase === 'idle') return ships.length ? 'WAITING FOR LAUNCH…' : 'NO RACERS YET — open your ship’s READY link';
     if (phase === 'finished') {
-      const podium = ships.filter((s) => s.finishedAt != null)
-        .sort((a, b) => a.finishedAt - b.finishedAt).slice(0, 3)
-        .map((s, i) => `${MEDALS[i]} @${s.callsign}`);
-      return podium.length ? `FINISH ✦ ${podium.join('  ')}` : 'FINISH ✦';
+      const podium = medalsText(ships);
+      return podium ? `FINISH ✦ ${podium}` : 'FINISH ✦';
+    }
+    // A ghost racer who never finishes blocks the server's 'finished' phase
+    // forever, so winners must show as they land, not just at round end.
+    if (phase === 'running') {
+      const podium = medalsText(ships);
+      if (podium) return podium;
     }
     return '';
   }

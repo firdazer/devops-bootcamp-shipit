@@ -7,6 +7,7 @@ const app = document.getElementById('app');
 const count = document.getElementById('count');
 const toasts = document.getElementById('toasts');
 const hud = document.getElementById('race-hud');
+const orbitHud = document.getElementById('hud');
 const hudClients = document.getElementById('hud-clients');
 const gl = detectWebGL();
 const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -46,8 +47,9 @@ function setMode(next) {
   if (next === mode) return;
   view.dispose();
   mode = next;
-  if (mode === 'race') { view = makeRace(); if (hud) hud.hidden = false; }
-  else { view = makeOrbit(shouldUseFallback({ gl, reducedMotion: mql.matches })); if (hud) hud.hidden = true; }
+  // The orbit HUD legend occludes the top rows at 40-ship density in race mode.
+  if (mode === 'race') { view = makeRace(); if (hud) hud.hidden = false; if (orbitHud) orbitHud.hidden = true; }
+  else { view = makeOrbit(shouldUseFallback({ gl, reducedMotion: mql.matches })); if (hud) hud.hidden = true; if (orbitHud) orbitHud.hidden = false; }
 }
 
 mql.addEventListener('change', (e) => {

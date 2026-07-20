@@ -9,7 +9,7 @@ export class Race {
     this.total = total;
     this.phase = 'idle';        // idle | running | finished
     this.prompts = [];          // identical ordered command list for every racer
-    this.racers = new Map();    // callsign -> { completed, finishedAt }
+    this.racers = new Map();    // callsign -> { completed, finishedAt, frac }
     this._seq = 0;              // monotonic finish-order counter
   }
 

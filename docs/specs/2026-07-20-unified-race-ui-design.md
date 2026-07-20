@@ -60,8 +60,8 @@ Same `{ update, dispose }` shape as every other view so `main.js` swaps it freel
   updates). Each row: rank chip · `@callsign` label · track lane with finish line · ship sprite ·
   progress readout (`7.4/12`-style, one decimal).
 - **Responsive to 40+.** Rows are `flex: 1 1 0` with `min-height` ≈ 10px and `max-height` ≈ 48px,
-  so 40 rows split any viewport evenly with no scrolling. Font sizes `clamp()`ed; when rows get
-  shorter than ~14px the callsign label hides (full name stays as `title`). The `me` row gets
+  so 40 rows split any viewport evenly with no scrolling. Font sizes `clamp()`ed; the callsign
+  label hides in dense mode, which triggers at 25+ racers (full name stays as `title`). The `me` row gets
   `flex-grow: 2` plus accent highlight so it stays findable at any density.
 - **Motion.** Ship position `left: calc(p × (100% − sprite width))` where
   `p = progressOf(completed, frac, total)`. CSS `transition: left 150ms linear`; with ~10 Hz
@@ -71,7 +71,8 @@ Same `{ update, dispose }` shape as every other view so `main.js` swaps it freel
   fallback, which is why `race-fallback.js` dies.
 - **Phases.** `idle`: dimmed rows + "WAITING FOR LAUNCH…" banner. `running`: live. `finished`:
   podium banner overlays top 3 by `finishedAt`. Finished ships show `✦` + final rank on their row.
-- **Theme-aware** via the existing CSS custom-property scheme in `style.css`/`play.css`.
+- **Dark-only**, with its own local CSS custom properties (not the light/dark scheme in
+  `style.css`/`play.css`) — consistent with the board's dark stage pages.
 
 ## `race-layout.js` — pure, node-tested
 

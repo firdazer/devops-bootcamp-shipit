@@ -33,7 +33,8 @@ async function call(path, body) {
   }
 }
 
-document.getElementById('start').onclick = () => call('/api/race/start', { session: sessionEl.value });
+const startBtn = document.getElementById('start');
+startBtn.onclick = () => call('/api/race/start', { session: sessionEl.value });
 document.getElementById('reset').onclick = () => call('/api/race/reset');
 document.getElementById('view-orbit').onclick = () => call('/api/view', { view: 'orbit' });
 document.getElementById('view-race').onclick = () => call('/api/view', { view: 'race' });
@@ -42,7 +43,13 @@ function connect() {
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
   ws.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data); } catch { return; }
-    if (m.t === 'race') liveEl.textContent = `phase: ${m.phase} · racers: ${(m.ships || []).length} · viewers: ${m.clients ?? 0}`;
+    if (m.t === 'race') {
+      liveEl.textContent = `phase: ${m.phase} · racers: ${(m.ships || []).length} · viewers: ${m.clients ?? 0}`;
+      // Starting mid-round zeroes the server while cockpits keep optimistic
+      // positions — a wedged round; RESET first (RESET stays always enabled,
+      // it's the escape hatch).
+      startBtn.disabled = m.phase === 'running';
+    }
   };
   ws.onclose = () => setTimeout(connect, 1000);
   ws.onerror = () => ws.close();
