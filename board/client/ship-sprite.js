@@ -4,9 +4,9 @@
 // after that the race is plain DOM — no per-frame WebGL. Resolves null when
 // WebGL or the models are unavailable; the track shows a tinted glyph instead.
 import * as THREE from 'three';
-import { createShip, preloadShipTemplates, disposeShip } from './ship-mesh.js';
+import { createShip, preloadShipTemplates, disposeShip, disposeObject3D } from './ship-mesh.js';
 
-const SIZE = 64;
+const SIZE = 128; // 2x the largest on-screen box (~26px CSS) so hiDPI stays crisp
 const cache = new Map(); // `${shipModel}|${color}` -> Promise<string|null>
 let ctx; // lazy { renderer, scene, camera }; null = WebGL unavailable
 let templatesPromise; // cache the promise; all sprite renders share one load
@@ -36,9 +36,28 @@ async function render(shipModel, color) {
   if (!ctx) return null;
   const template = templates.get(shipModel) || templates.get('fighter');
   const ship = createShip({ callsign: '', color, shipModel, template });
-  ship.traverse((o) => { if (o.isSprite) o.visible = false; }); // hide the "@callsign" label — sprites are ship-only
-  ship.rotation.y = Math.PI / 2; // side profile, nose toward +x — matches track direction
+  // Strip the non-hull extras (label sprite; invisible trail/liveRing meshes):
+  // Box3.setFromObject counts them even when invisible, which would inflate the
+  // framing below and shrink the hull to a speck in the canvas.
+  for (const o of [...ship.children]) {
+    if (o.isSprite || o.visible === false) { ship.remove(o); disposeObject3D(o); }
+  }
+  // 3/4 view, nose toward +x: pure side-on renders these low-poly hulls as a
+  // thin sliver — yawing off-axis and pitching the top toward the camera keeps
+  // the track direction readable while showing an actual ship silhouette.
+  ship.rotation.set(0.55, 1.0, 0);
   ctx.scene.add(ship);
+  ship.updateMatrixWorld(true);
+  // Frame the camera to the hull so it fills the canvas regardless of model size.
+  const box = new THREE.Box3().setFromObject(ship);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const half = (Math.max(size.x, size.y) / 2) * 1.1 || 1.6;
+  ctx.camera.left = center.x - half;
+  ctx.camera.right = center.x + half;
+  ctx.camera.top = center.y + half;
+  ctx.camera.bottom = center.y - half;
+  ctx.camera.updateProjectionMatrix();
   ctx.renderer.render(ctx.scene, ctx.camera);
   const url = ctx.renderer.domElement.toDataURL('image/png');
   ctx.scene.remove(ship);
