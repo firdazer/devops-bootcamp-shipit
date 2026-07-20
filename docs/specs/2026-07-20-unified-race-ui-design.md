@@ -103,8 +103,11 @@ Cockpit → server (WS), extending the existing message — no new type:
 ```
 
 - `frac` = matched-prefix length ÷ current prompt length, clamped 0–1. Sent on keystroke,
-  **trailing-throttled to one message per 100 ms**; prompt-completion messages bypass the
-  throttle and send immediately (as today).
+  **trailing-throttled to one message per 100 ms**. A fully typed command reports `frac` 0.9
+  and holds — the racer must press **ENTER to run it** (terminal muscle-memory beat); the
+  completion message bypasses the throttle and sends immediately on ENTER, with a local
+  lunge+flare "boost" flourish on their ship. ENTER on a wrong/incomplete line shakes the
+  input and sends nothing.
 - Server (`race.js`), only while `phase === 'running'`, racer known:
   - `m.completed === r.completed + 1` → advance (existing monotonic guard), `r.frac = 0`.
   - `m.completed === r.completed` → `r.frac = clamp01(Number(m.frac) || 0)`.

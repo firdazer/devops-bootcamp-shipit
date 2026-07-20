@@ -118,8 +118,20 @@ export function createRaceTrack(container, { me = null } = {}) {
     }
   }
 
+  // Pulse the ENTER-boost flourish on one ship (lunge + engine flare).
+  function boost(callsign) {
+    const r = rows.get(callsign);
+    if (!r) return;
+    r.ship.classList.remove('boost');
+    void r.ship.offsetWidth; // restart the animation on rapid re-trigger
+    r.ship.classList.add('boost');
+    clearTimeout(r.boostTimer);
+    r.boostTimer = setTimeout(() => r.ship.classList.remove('boost'), 500);
+  }
+
   return {
     update,
+    boost,
     dispose() { disposed = true; root.remove(); rows.clear(); },
   };
 }

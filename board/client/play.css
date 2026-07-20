@@ -11,6 +11,14 @@ body { margin: 0; background: #0b1220; color: #e2e8f0; font: 16px/1.4 ui-monospa
 }
 #status { color: #94a3b8; margin: 0; }
 #prompt { font-size: 1.4rem; margin: 0; padding: 0.6rem 0.9rem; background: #111a2e; border-radius: 8px; min-height: 1.8rem; }
+#prompt[data-done='1'] { outline: 2px solid #22d3ee; }
 #entry { font: inherit; font-size: 1.1rem; padding: 0.6rem 0.9rem; background: #0f172a; color: #e2e8f0; border: 2px solid #334155; border-radius: 8px; }
 #entry:focus { outline: none; border-color: #22d3ee; }
 #entry:disabled { opacity: 0.5; }
+#entry.shake { animation: entry-shake 0.25s; }
+@keyframes entry-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+@media (prefers-reduced-motion: reduce) { #entry.shake { animation: none; } }

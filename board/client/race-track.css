@@ -86,12 +86,30 @@
   50% { opacity: 0.3; transform: translateY(-50%) scaleX(0.65); }
 }
 
+/* ENTER boost: a one-shot lunge + flare layered over the position glide.
+   race-track.js pulses the class for ~500ms. */
+.race-row .ship.boost .sprite,
+.race-row .ship.boost .glyph { animation: race-boost 0.45s ease-out; }
+@keyframes race-boost {
+  0% { transform: translateX(-4px) scale(1); }
+  35% { transform: translateX(6px) scale(1.35) rotate(2deg); }
+  100% { transform: translateX(0) scale(1); }
+}
+.race-row .ship.boost::before { animation: race-flare 0.45s ease-out; }
+@keyframes race-flare {
+  0% { opacity: 1; transform: translateY(-50%) scaleX(2.2); }
+  100% { opacity: 0.5; transform: translateY(-50%) scaleX(1); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .race-track { animation: none; }
   .race-row .ship { transition: none; }
   .race-row .ship .sprite,
-  .race-row .ship .glyph { animation: none; }
-  .race-row .ship::before { animation: none; opacity: 0.5; }
+  .race-row .ship .glyph,
+  .race-row .ship.boost .sprite,
+  .race-row .ship.boost .glyph { animation: none; }
+  .race-row .ship::before,
+  .race-row .ship.boost::before { animation: none; opacity: 0.5; }
 }
 
 /* 25+ racers: reclaim label space, shrink sprites, keep every row legible */

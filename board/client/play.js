@@ -18,9 +18,11 @@ let prevPhase = 'idle';
 function render() {
   const target = prompts[completed] || '';
   promptEl.textContent = target;
+  let done = false;
   if (phase === 'running' && completed < prompts.length) {
-    const { matched } = typedState(target, entry.value);
-    promptEl.dataset.matched = String(matched);
+    const st = typedState(target, entry.value);
+    done = st.done;
+    promptEl.dataset.matched = String(st.matched);
     const wasDisabled = entry.disabled;
     entry.disabled = false;
     // `autofocus` dies while the input is disabled pre-race — without this,
@@ -29,8 +31,9 @@ function render() {
   } else {
     entry.disabled = true;
   }
+  promptEl.dataset.done = done ? '1' : '';
   statusEl.textContent =
-    phase === 'running' ? `RACING — ${completed}/${prompts.length}`
+    phase === 'running' ? (done ? 'ENTER to run ⏎' : `RACING — ${completed}/${prompts.length}`)
     : phase === 'finished' ? 'FINISHED ✦'
     : 'waiting for race…';
 }
@@ -76,15 +79,26 @@ function connect() {
   entry.oninput = () => {
     const target = prompts[completed] || '';
     const { matched, done } = typedState(target, entry.value);
-    promptEl.dataset.matched = String(matched);
+    // A fully typed command holds just short of the boundary — ENTER runs it
+    // (the boost). Typing a command and running it stay distinct beats.
+    if (phase === 'running' && target.length > 0) sendFrac(done ? 0.9 : matched / target.length);
+    render();
+  };
+  entry.onkeydown = (e) => {
+    if (e.key !== 'Enter') return;
+    const target = prompts[completed] || '';
+    const { done } = typedState(target, entry.value);
     if (done && phase === 'running') {
       sendFrac.cancel();
       completed += 1;
       entry.value = '';
       ws.send(JSON.stringify({ t: 'progress', completed }));
+      track.boost(callsign);
       render();
-    } else if (phase === 'running' && target.length > 0) {
-      sendFrac(matched / target.length);
+    } else if (phase === 'running') {
+      entry.classList.remove('shake');
+      void entry.offsetWidth; // restart the animation on rapid re-trigger
+      entry.classList.add('shake');
     }
   };
   ws.onclose = () => { statusEl.textContent = 'disconnected — reconnecting…'; setTimeout(connect, 1000); };
