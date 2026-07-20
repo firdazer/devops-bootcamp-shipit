@@ -1,5 +1,5 @@
 name: deploy
-on: [push,workflow_dispatch]
+on: [push, workflow_dispatch]
 jobs:
   Launching:
     runs-on: ubuntu-latest
@@ -17,4 +17,4 @@ jobs:
       - uses: actions/deploy-pages@v5
 permissions:
   pages: write
-  id-token: write      
+  id-token: write   
