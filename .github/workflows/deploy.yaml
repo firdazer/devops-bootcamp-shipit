@@ -11,10 +11,14 @@ jobs:
       - uses: actions/setup-node@v7
       - run: npm clean-install
       - run: npm run test
+<<<<<<< HEAD
       - run: bash scripts/report.sh
         env:
           BOARD_URL: ${{ vars.BOARD_URL }}
           SHIPIT_TOKEN: ${{ secrets.SHIPIT_TOKEN }
+=======
+
+>>>>>>> 8bfc3c72de1eefae565c4bc7fb34496fc07c04c6
   deploy:
     needs: test
     runs-on: ubuntu-latest
