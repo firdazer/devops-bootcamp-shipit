@@ -22,6 +22,8 @@ body { margin: 0; background: #0b1220; color: #e2e8f0; font: 16px/1.4 ui-monospa
 .dot.y { background: #713f12; }
 .dot.g { background: #14532d; }
 #termtitle { margin-left: 8px; color: #64748b; font-size: 0.75rem; }
+#wpm { margin-left: auto; color: #22d3ee; font-size: 0.75rem; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; min-width: 4.5ch; text-align: right; }
+#wpm:empty { visibility: hidden; }
 /* One command, one line — sized so the longest story command (55 chars with
    the $ prompt) fits the dock without wrapping. */
 #line { margin: 0; padding: 0.9rem 1rem 1.1rem; font-size: clamp(0.75rem, 2.1vw, 1.15rem); line-height: 1.5; white-space: pre; overflow: hidden; }
