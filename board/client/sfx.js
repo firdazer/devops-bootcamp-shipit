@@ -18,7 +18,7 @@ function ctx() {
     if (!AC) return null;
     ac = new AC();
     master = ac.createGain();
-    master.gain.value = 0.5;
+    master.gain.value = 0.9;
     master.connect(ac.destination);
   }
   if (ac.state === 'suspended') ac.resume();

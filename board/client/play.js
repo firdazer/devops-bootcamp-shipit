@@ -2,6 +2,7 @@ import './play.css';
 import { advance } from './typing.js';
 import { createRaceTrack } from './race-track.js';
 import { sfx } from './sfx.js';
+import { computeWpm } from './wpm.js';
 
 const params = new URLSearchParams(location.search);
 const callsign = (params.get('callsign') || '').toLowerCase();
@@ -20,6 +21,11 @@ let synced = false;  // true once we've trusted the server's position after (re)
 let prevPhase = 'idle';
 let typedCount = 0;      // strict cursor into the current prompt — wrong keys never move it
 let currentTarget = null;
+let startAt = null;       // cockpit-local clock; stamped on the go transition
+let charsAtStart = 0;     // baseline: chars already done when the clock started (reload-safe)
+let wpmTimer = null;      // ticks the own readout while running (idle decay is local-only)
+let finalWpm = null;      // frozen personal-finish WPM; overrides the live clock once you land
+const wpmEl = document.getElementById('wpm');
 
 const muteBtn = document.getElementById('mute');
 const showMute = () => { muteBtn.textContent = sfx.muted ? '🔇' : '🔊'; };
@@ -28,6 +34,26 @@ showMute();
 
 const target = () => prompts[completed] || '';
 const lineDone = () => { const t = target(); return t.length > 0 && typedCount === t.length; };
+
+// Total correct characters typed this session: every completed prompt's full
+// length plus the current line's strict cursor. Wrong keys never landed.
+const correctChars = () => prompts.slice(0, completed).reduce((n, p) => n + p.length, 0) + typedCount;
+const myWpm = () => computeWpm({ correctChars: correctChars(), charsAtStart, startAt, now: Date.now() });
+
+function renderWpm() {
+  const w = finalWpm != null ? finalWpm : myWpm();
+  wpmEl.textContent = w == null ? '' : `${w} WPM`;
+}
+function startWpmClock() {
+  finalWpm = null;
+  startAt = Date.now();
+  charsAtStart = correctChars();
+  clearInterval(wpmTimer);
+  wpmTimer = setInterval(renderWpm, 250); // local decay while paused; board updates on keystroke
+}
+function stopWpmClock() {
+  clearInterval(wpmTimer); wpmTimer = null;
+}
 
 let errTimer = null;
 function rejectKey() {
@@ -58,6 +84,7 @@ function render() {
     phase === 'running' ? (lineDone() ? 'ENTER to run ⏎' : `RACING — ${completed}/${prompts.length}`)
     : phase === 'finished' ? 'FINISHED ✦'
     : 'waiting for race…';
+  renderWpm();
 }
 
 // Trailing throttle: at most one frac report per 100ms. Completions bypass
@@ -70,7 +97,7 @@ function fracSender(ws) {
     timer = setTimeout(() => {
       timer = null;
       if (ws.readyState === WebSocket.OPEN && phase === 'running') {
-        ws.send(JSON.stringify({ t: 'progress', completed, frac: latest }));
+        ws.send(JSON.stringify({ t: 'progress', completed, frac: latest, wpm: myWpm() ?? 0 }));
       }
     }, 100);
   };
@@ -93,7 +120,9 @@ function connect() {
       if (!synced) { completed = serverCompleted; synced = true; }             // (re)connect/reload: trust the server's position
       else if (m.phase === 'running' && prevPhase !== 'running') completed = serverCompleted; // new round: server reset us to 0
       // during a running round, keep the local optimistic `completed`; the server silently rejects bad progress
-      if (m.phase === 'running' && prevPhase !== 'running') sfx.go();
+      if (m.phase === 'running' && prevPhase !== 'running') { sfx.go(); startWpmClock(); }
+      if (m.phase !== 'running') stopWpmClock();
+      if (m.phase === 'idle') { startAt = null; finalWpm = null; } // reset: chip blanks until next go
       prevPhase = m.phase;
       track.update({ phase: m.phase, total: m.total, ships: m.ships || [] });
       render();
@@ -131,9 +160,9 @@ function connect() {
       currentTarget = null;
       typedCount = 0;
       entry.value = '';
-      ws.send(JSON.stringify({ t: 'progress', completed }));
+      ws.send(JSON.stringify({ t: 'progress', completed, wpm: myWpm() ?? 0 }));
       track.boost(callsign);
-      if (completed >= prompts.length) sfx.finish(); else sfx.boost();
+      if (completed >= prompts.length) { finalWpm = myWpm() ?? 0; stopWpmClock(); sfx.finish(); } else sfx.boost();
       render();
     } else if (phase === 'running') {
       sfx.error();
